@@ -14,18 +14,17 @@ MQTT_SERVER = "broker.hivemq.com"
 MQTT_PORT = 1883
 
 # --- Topik (Subscription: Data dari ESP32/ML Server) ---
-TOPIC_STATUS_BRANKAS = "data/status/kontrol" # Status umum brankas (Aman/Terbuka/Dibobol)
-TOPIC_DIST = "data/dist/kontrol"              #sensor Jarak Ultrasonik
-TOPIC_PIR = "data/pir/kontrol"              # Sensor PIR
-TOPIC_ML_FACE_RESULT = "ai/face/result"     # Hasil Prediksi Wajah (dari ML Server)
-TOPIC_ML_VOICE_RESULT = "ai/voice/result"   # Hasil Prediksi Suara (dari ML Server)
-TOPIC_CAM_PHOTO_URL = "/iot/camera/photo"    # URL Foto Terbaru
+TOPIC_STATUS_BRANKAS = "data/status/kontrol"
+TOPIC_DIST = "data/dist/kontrol"
+TOPIC_PIR = "data/pir/kontrol" 
+TOPIC_ML_FACE_RESULT = "ai/face/result"
+TOPIC_ML_VOICE_RESULT = "ai/voice/result"
+TOPIC_CAM_PHOTO_URL = "/iot/camera/photo"
 TOPIC_AUDIO_LINK = "data/audio/link"
 
 # --- Topik (Publication: Perintah ke ESP32/Camera) ---
-TOPIC_CAM_TRIGGER = "/iot/camera/trigger"    # Perintah Ambil Foto
-TOPIC_ALARM_CONTROL = "data/alarm/kontrol"   # Perintah Matikan/Nyalakan Alarm
-
+TOPIC_CAM_TRIGGER = "/iot/camera/trigger"
+TOPIC_ALARM_CONTROL = "data/alarm/kontrol"
 # ====================================================================
 # INISIALISASI STREAMLIT SESSION STATE
 # ====================================================================
@@ -249,4 +248,5 @@ with tab3:
 # Refresh otomatis
 time.sleep(2)
 st.rerun()
+
 
