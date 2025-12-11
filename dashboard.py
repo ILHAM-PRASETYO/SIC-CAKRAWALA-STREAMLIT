@@ -7,7 +7,28 @@ import time
 import json
 import threading
 
-# Inisialisasi session state
+# ====================================================================
+# KONFIGURASI MQTT
+# ====================================================================
+MQTT_SERVER = "broker.hivemq.com" 
+MQTT_PORT = 1883
+
+# --- Topik (Subscription: Data dari ESP32/ML Server) ---
+TOPIC_STATUS_BRANKAS = "data/status/kontrol" # Status umum brankas (Aman/Terbuka/Dibobol)
+TOPIC_DIST = "data/dist/kontrol"            # Sensor Jarak Ultrasonik
+TOPIC_PIR = "data/pir/kontrol"               # Sensor PIR
+TOPIC_ML_FACE_RESULT = "ai/face/result"     # Hasil Prediksi Wajah (dari ML Server)
+TOPIC_ML_VOICE_RESULT = "ai/voice/result"   # Hasil Prediksi Suara (dari ML Server)
+TOPIC_CAM_PHOTO_URL = "/iot/camera/photo"    # URL Foto Terbaru
+TOPIC_AUDIO_LINK = "data/audio/link"
+
+# --- Topik (Publication: Perintah ke ESP32/Camera) ---
+TOPIC_CAM_TRIGGER = "/iot/camera/trigger"    # Perintah Ambil Foto
+TOPIC_ALARM_CONTROL = "data/alarm/kontrol"   # Perintah Matikan/Nyalakan Alarm
+
+# ====================================================================
+# INISIALISASI STREAMLIT SESSION STATE
+# ====================================================================
 for key in ["df_face", "df_voice", "df_brankas"]:
     if key not in st.session_state:
         if key == "df_brankas":
@@ -26,6 +47,12 @@ if 'last_voice_time' not in st.session_state:
 if 'photo_url' not in st.session_state:
     st.session_state.photo_url = "https://via.placeholder.com/640x480?text=No+Photo+Yet"
 
+if 'audio_url' not in st.session_state:
+    st.session_state.audio_url = None
+# ====================================================================
+# FUNGSI LOGIKA DAN CALLBACK MQTT
+# ====================================================================
+
 # Fungsi untuk menggabungkan prediksi dan sensor
 def generate_final_prediction(row):
     wajah = row.get("Prediksi Wajah", "")
@@ -34,14 +61,15 @@ def generate_final_prediction(row):
     pir = row.get("PIR", np.nan)
     status = row.get("Status Brankas", "")
 
-    if "Dibuka Paksa" in status:
+    if "Brangkas Dibuka Paksa" in status:
         return "⚠ Dibobol!"
-    if wajah == "Wajah Tidak Dikenal" or suara == "Suara Mencurigakan":
+    # Asumsi: Prediksi ML wajah/suara yang tidak dikenali
+    if wajah == "Unknown" or suara == "Not_User" or wajah == "OTHER_FACES": 
         return "🚨 Mencurigakan!"
-    if wajah == "Wajah Dikenal" and suara == "Suara Sah":
+    if "Terbuka Secara Aman" in status:
         return "✅ Sah & Aman"
-    if pd.notna(jarak) and jarak < 30:
-        return "👀 Aktivitas Terdeteksi"
+    if pd.notna(jarak) and jarak > 0 and jarak < 25: # Jarak > 0 untuk menghilangkan pembacaan sensor yang gagal (0)
+        return "👀 Aktivitas Dekat"
     if pd.notna(pir) and pir == 1:
         return "👀 Gerakan Terdeteksi"
     return "✅ Aman"
@@ -54,21 +82,21 @@ def on_mqtt_message(client, userdata, msg):
     except UnicodeDecodeError:
         return
 
-    if topic == "data/status/kontrol":
+    if topic == TOPIC_STATUS_BRANKAS:
         new_row = {
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Status Brankas": payload,
             "Jarak (cm)": np.nan,
             "PIR": np.nan,
-            "Prediksi Wajah": "any",
-            "Prediksi Suara": "any",
+            "Prediksi Wajah": "Menunggu...",
+            "Prediksi Suara": "Menunggu...",
             "Label Prediksi": "Belum Diproses"
         }
         st.session_state.df_brankas = pd.concat([
             st.session_state.df_brankas, pd.DataFrame([new_row])
         ], ignore_index=True)
 
-    elif topic == "data/ldr/kontrol":
+    elif topic == TOPIC_DIST:
         try:
             distance = float(payload)
             if not st.session_state.df_brankas.empty:
@@ -76,7 +104,7 @@ def on_mqtt_message(client, userdata, msg):
         except:
             pass
 
-    elif topic == "data/pir/kontrol":
+    elif topic == TOPIC_PIR:
         try:
             pir_val = int(payload)
             if not st.session_state.df_brankas.empty:
@@ -84,28 +112,37 @@ def on_mqtt_message(client, userdata, msg):
         except:
             pass
 
-    elif topic == "/ai/face/result":
+    elif topic == TOPIC_ML_FACE_RESULT:
         if not st.session_state.df_brankas.empty:
             st.session_state.df_brankas.loc[st.session_state.df_brankas.index[-1], 'Prediksi Wajah'] = payload
 
-    elif topic == "/ai/voice/result":
+    elif topic == TOPIC_ML_VOICE_RESULT:
         if not st.session_state.df_brankas.empty:
             st.session_state.df_brankas.loc[st.session_state.df_brankas.index[-1], 'Prediksi Suara'] = payload
 
-    elif topic == "/iot/camera/photo":
+    elif topic == TOPIC_CAM_PHOTO_URL:
         st.session_state.photo_url = f"{payload}?t={int(time.time())}"
+    
+    elif topic == TOPIC_AUDIO_LINK:
+        st.session_state.audio_url = f"{payload}?t={int(time.time())}" 
+        st.info(f"Link audio baru diterima: {st.session_state.audio_url}") #
 
-# Inisialisasi MQTT
+# ====================================================================
+# INISIALISASI & LOOP MQTT
+# ====================================================================
+
 mqtt_client = mqtt.Client()
 mqtt_client.on_message = on_mqtt_message
-mqtt_client.connect("localhost", 1883, 60)
+# 🛑 FIX UTAMA: Menggunakan broker.hivemq.com alih-alih localhost
+mqtt_client.connect(MQTT_SERVER, MQTT_PORT, 60) 
 mqtt_client.subscribe([
-    ("data/status/kontrol", 0),
-    ("data/ldr/kontrol", 0),
-    ("data/pir/kontrol", 0),
-    ("/ai/face/result", 0),
-    ("/ai/voice/result", 0),
-    ("/iot/camera/photo", 0)
+    (TOPIC_STATUS_BRANKAS, 0),
+    (TOPIC_DIST, 0),
+    (TOPIC_PIR, 0),
+    (TOPIC_ML_FACE_RESULT, 0),
+    (TOPIC_ML_VOICE_RESULT, 0),
+    (TOPIC_CAM_PHOTO_URL, 0),
+    (TOPIC_AUDIO_LINK, 0)
 ])
 
 def mqtt_loop():
@@ -114,8 +151,13 @@ def mqtt_loop():
 mqtt_thread = threading.Thread(target=mqtt_loop, daemon=True)
 mqtt_thread.start()
 
-# Fungsi baca hasil ML baru
+# ====================================================================
+# FUNGSI TAMBAHAN LOG ML (results.json)
+# ====================================================================
+
 def load_new_ml_results():
+    # Fungsi ini dipertahankan meski data ML kini harusnya lewat MQTT
+    # Tapi ini bisa digunakan untuk historical data dari file
     try:
         with open("results.json", "r") as f:
             data = json.load(f)
@@ -161,7 +203,9 @@ if not st.session_state.df_brankas.empty:
         generate_final_prediction, axis=1
     )
 
+# ====================================================================
 # UI Dashboard
+# ====================================================================
 st.title("🔒 Dashboard Monitoring Brankas & AI")
 tab1, tab2, tab3 = st.tabs(["🏠 Brankas", "🖼️ ML Gambar", "🔊 ML Audio"])
 
@@ -170,10 +214,12 @@ with tab1:
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("📷 Ambil Foto"):
-            mqtt_client.publish("/iot/camera/trigger", "capture")
+            # Menggunakan konstanta TOPIC_CAM_TRIGGER
+            mqtt_client.publish(TOPIC_CAM_TRIGGER, "capture")
     with col2:
         if st.button("🔇 Matikan Alarm"):
-            mqtt_client.publish("data/allert/control", "off")
+            # Menggunakan konstanta TOPIC_ALARM_CONTROL dan pesan "OFF" (huruf kapital)
+            mqtt_client.publish(TOPIC_ALARM_CONTROL, "OFF")
     with col3:
         if st.button("🔄 Refresh Gambar"):
             st.session_state.photo_url = f"{st.session_state.photo_url.split('?')[0]}?t={int(time.time())}"
@@ -191,9 +237,15 @@ with tab2:
 
 # Tab ML Suara
 with tab3:
+    st.subheader("Audio Terbaru untuk Analisis")
+    if st.session_state.audio_url:
+        # Gunakan st.audio() untuk menampilkan pemutar
+        st.audio(st.session_state.audio_url, format='audio/wav')
+    else:
+        st.info("Menunggu rekaman audio terbaru...")
+
     st.subheader("Log Prediksi Suara")
     st.dataframe(st.session_state.df_voice.tail(10))
-
 # Refresh otomatis
 time.sleep(2)
 st.rerun()
