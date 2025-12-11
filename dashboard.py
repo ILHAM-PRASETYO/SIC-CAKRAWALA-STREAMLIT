@@ -15,8 +15,8 @@ MQTT_PORT = 1883
 
 # --- Topik (Subscription: Data dari ESP32/ML Server) ---
 TOPIC_STATUS_BRANKAS = "data/status/kontrol" # Status umum brankas (Aman/Terbuka/Dibobol)
-TOPIC_DIST = "data/dist/kontrol"            # Sensor Jarak Ultrasonik
-TOPIC_PIR = "data/pir/kontrol"               # Sensor PIR
+TOPIC_DIST = "data/dist/kontrol"              #sensor Jarak Ultrasonik
+TOPIC_PIR = "data/pir/kontrol"              # Sensor PIR
 TOPIC_ML_FACE_RESULT = "ai/face/result"     # Hasil Prediksi Wajah (dari ML Server)
 TOPIC_ML_VOICE_RESULT = "ai/voice/result"   # Hasil Prediksi Suara (dari ML Server)
 TOPIC_CAM_PHOTO_URL = "/iot/camera/photo"    # URL Foto Terbaru
@@ -249,3 +249,4 @@ with tab3:
 # Refresh otomatis
 time.sleep(2)
 st.rerun()
+
