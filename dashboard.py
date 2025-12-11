@@ -161,7 +161,32 @@ mqtt_thread.start()
 # ====================================================================
 # PENGOLAHAN LOG ML DAN PREDIKSI (TIDAK BERUBAH)
 # ====================================================================
-# ... (Kode load_new_ml_results dan update df_face/df_voice tetap sama) ...
+def load_new_ml_results():
+    try:
+        with open("results.json", "r") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return {"face": [], "voice": []}
+
+    new_face = []
+    new_voice = []
+
+    for item in data["face"]:
+        item_time = datetime.strptime(item["Timestamp"], "%Y-%m-%d %H:%M:%S")
+        if st.session_state.last_face_time is None or item_time > st.session_state.last_face_time:
+            new_face.append(item)
+
+    for item in data["voice"]:
+        item_time = datetime.strptime(item["Timestamp"], "%Y-%m-%d %H:%M:%S")
+        if st.session_state.last_voice_time is None or item_time > st.session_state.last_voice_time:
+            new_voice.append(item)
+
+    if new_face:
+        st.session_state.last_face_time = datetime.strptime(new_face[-1]["Timestamp"], "%Y-%m-%d %H:%M:%S")
+    if new_voice:
+        st.session_state.last_voice_time = datetime.strptime(new_voice[-1]["Timestamp"], "%Y-%m-%d %H:%M:%S")
+
+    return {"face": new_face, "voice": new_voice}
 new_results = load_new_ml_results()
 for item in new_results["face"]:
     st.session_state.df_face = pd.concat([
@@ -297,3 +322,4 @@ process_mqtt_queue()
 # Refresh otomatis
 time.sleep(2)
 st.rerun()
+
