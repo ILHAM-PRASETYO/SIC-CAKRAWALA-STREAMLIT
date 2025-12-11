@@ -8,6 +8,7 @@ import json
 import threading
 import plotly.graph_objects as go 
 
+st.set_page_config(layout="wide")
 # ====================================================================
 # KONFIGURASI MQTT (TIDAK BERUBAH)
 # ====================================================================
@@ -318,3 +319,4 @@ with tab3:
 # Refresh otomatis
 time.sleep(2)
 st.rerun()
+
