@@ -6,9 +6,10 @@ from datetime import datetime
 import time
 import json
 import threading
+import plotly.graph_objects as go 
 
 # ====================================================================
-# KONFIGURASI MQTT
+# KONFIGURASI MQTT (TIDAK BERUBAH)
 # ====================================================================
 MQTT_SERVER = "broker.hivemq.com" 
 MQTT_PORT = 1883
@@ -26,7 +27,7 @@ TOPIC_AUDIO_LINK = "data/audio/link"
 TOPIC_CAM_TRIGGER = "/iot/camera/trigger"
 TOPIC_ALARM_CONTROL = "data/alarm/kontrol"
 # ====================================================================
-# INISIALISASI STREAMLIT SESSION STATE
+# INISIALISASI STREAMLIT SESSION STATE (TIDAK BERUBAH)
 # ====================================================================
 for key in ["df_face", "df_voice", "df_brankas"]:
     if key not in st.session_state:
@@ -48,11 +49,12 @@ if 'photo_url' not in st.session_state:
 
 if 'audio_url' not in st.session_state:
     st.session_state.audio_url = None
+
 # ====================================================================
-# FUNGSI LOGIKA DAN CALLBACK MQTT
+# FUNGSI LOGIKA DAN CALLBACK MQTT (TIDAK BERUBAH)
 # ====================================================================
 
-# Fungsi untuk menggabungkan prediksi dan sensor
+# Fungsi untuk menggabungkan prediksi dan sensor (TIDAK BERUBAH)
 def generate_final_prediction(row):
     wajah = row.get("Prediksi Wajah", "")
     suara = row.get("Prediksi Suara", "")
@@ -62,18 +64,17 @@ def generate_final_prediction(row):
 
     if "Brangkas Dibuka Paksa" in status:
         return "⚠ Dibobol!"
-    # Asumsi: Prediksi ML wajah/suara yang tidak dikenali
     if wajah == "Unknown" or suara == "Not_User" or wajah == "OTHER_FACES": 
         return "🚨 Mencurigakan!"
     if "Terbuka Secara Aman" in status:
         return "✅ Sah & Aman"
-    if pd.notna(jarak) and jarak > 0 and jarak < 25: # Jarak > 0 untuk menghilangkan pembacaan sensor yang gagal (0)
+    if pd.notna(jarak) and jarak > 0 and jarak < 25: 
         return "👀 Aktivitas Dekat"
     if pd.notna(pir) and pir == 1:
         return "👀 Gerakan Terdeteksi"
     return "✅ Aman"
 
-# Callback MQTT
+# Callback MQTT (TIDAK BERUBAH)
 def on_mqtt_message(client, userdata, msg):
     topic = msg.topic
     try:
@@ -94,45 +95,42 @@ def on_mqtt_message(client, userdata, msg):
         st.session_state.df_brankas = pd.concat([
             st.session_state.df_brankas, pd.DataFrame([new_row])
         ], ignore_index=True)
+        
+    elif not st.session_state.df_brankas.empty:
+        last_index = st.session_state.df_brankas.index[-1]
+        
+        if topic == TOPIC_DIST:
+            try:
+                distance = float(payload)
+                st.session_state.df_brankas.loc[last_index, 'Jarak (cm)'] = distance
+            except ValueError:
+                pass
 
-    elif topic == TOPIC_DIST:
-        try:
-            distance = float(payload)
-            if not st.session_state.df_brankas.empty:
-                st.session_state.df_brankas.loc[st.session_state.df_brankas.index[-1], 'Jarak (cm)'] = distance
-        except:
-            pass
+        elif topic == TOPIC_PIR:
+            try:
+                pir_val = int(payload)
+                st.session_state.df_brankas.loc[last_index, 'PIR'] = pir_val
+            except ValueError:
+                pass
 
-    elif topic == TOPIC_PIR:
-        try:
-            pir_val = int(payload)
-            if not st.session_state.df_brankas.empty:
-                st.session_state.df_brankas.loc[st.session_state.df_brankas.index[-1], 'PIR'] = pir_val
-        except:
-            pass
+        elif topic == TOPIC_ML_FACE_RESULT:
+            st.session_state.df_brankas.loc[last_index, 'Prediksi Wajah'] = payload
 
-    elif topic == TOPIC_ML_FACE_RESULT:
-        if not st.session_state.df_brankas.empty:
-            st.session_state.df_brankas.loc[st.session_state.df_brankas.index[-1], 'Prediksi Wajah'] = payload
-
-    elif topic == TOPIC_ML_VOICE_RESULT:
-        if not st.session_state.df_brankas.empty:
-            st.session_state.df_brankas.loc[st.session_state.df_brankas.index[-1], 'Prediksi Suara'] = payload
+        elif topic == TOPIC_ML_VOICE_RESULT:
+            st.session_state.df_brankas.loc[last_index, 'Prediksi Suara'] = payload
 
     elif topic == TOPIC_CAM_PHOTO_URL:
         st.session_state.photo_url = f"{payload}?t={int(time.time())}"
-    
+        
     elif topic == TOPIC_AUDIO_LINK:
         st.session_state.audio_url = f"{payload}?t={int(time.time())}" 
-        st.info(f"Link audio baru diterima: {st.session_state.audio_url}") #
+        st.info(f"Link audio baru diterima: {st.session_state.audio_url}")
 
 # ====================================================================
-# INISIALISASI & LOOP MQTT
+# INISIALISASI & LOOP MQTT (TIDAK BERUBAH)
 # ====================================================================
-
 mqtt_client = mqtt.Client()
 mqtt_client.on_message = on_mqtt_message
-# 🛑 FIX UTAMA: Menggunakan broker.hivemq.com alih-alih localhost
 mqtt_client.connect(MQTT_SERVER, MQTT_PORT, 60) 
 mqtt_client.subscribe([
     (TOPIC_STATUS_BRANKAS, 0),
@@ -151,12 +149,10 @@ mqtt_thread = threading.Thread(target=mqtt_loop, daemon=True)
 mqtt_thread.start()
 
 # ====================================================================
-# FUNGSI TAMBAHAN LOG ML (results.json)
+# FUNGSI TAMBAHAN LOG ML (results.json) - Dipertahankan
 # ====================================================================
-
 def load_new_ml_results():
-    # Fungsi ini dipertahankan meski data ML kini harusnya lewat MQTT
-    # Tapi ini bisa digunakan untuk historical data dari file
+    # ... (kode load_new_ml_results Anda) ...
     try:
         with open("results.json", "r") as f:
             data = json.load(f)
@@ -183,7 +179,6 @@ def load_new_ml_results():
 
     return {"face": new_face, "voice": new_voice}
 
-# Tambahkan hasil ML baru ke log
 new_results = load_new_ml_results()
 
 for item in new_results["face"]:
@@ -203,110 +198,113 @@ if not st.session_state.df_brankas.empty:
     )
 
 # ====================================================================
-# UI Dashboard
+# UI Dashboard (Struktur Direvisi)
 # ====================================================================
-# ... (Kode inisialisasi dan fungsi di atas tetap sama) ...
+st.title("🔒 Dashboard Monitoring Brankas & AI")
 
-# UI Dashboard
-st.title("🔒 Dashboard Monitoring Brankas & ML")
-tab1, tab2, tab3 = st.tabs(["🏠 Brankas", "🖼️ ML Gambar", "🔊 ML Audio"])
+# --- BAGIAN ATAS (CHART & LOG UTAMA) ---
+chart_col, log_col = st.columns([2, 1])
 
-# Tab Brankas
-with tab1:
-    # Mengambil data CSV terlebih dahulu
+with chart_col:
+    st.header("Live Chart (Jarak & PIR)")
+    df_plot = st.session_state.df_brankas.tail(200).copy()
+    
+    # Hapus baris dengan nilai NaN pada Jarak dan PIR agar chart bersih
+    df_plot.dropna(subset=['Jarak (cm)', 'PIR'], inplace=True) 
+
+    if not df_plot.empty:
+        fig = go.Figure()
+        
+        # Scatter plot untuk Jarak (cm)
+        fig.add_trace(go.Scatter(
+            x=df_plot["Timestamp"], 
+            y=df_plot["Jarak (cm)"], 
+            mode="lines+markers", 
+            name="Jarak (cm)"
+        ))
+        
+        # Scatter plot untuk PIR (Nilai 0 atau 1)
+        fig.add_trace(go.Scatter(
+            x=df_plot["Timestamp"], 
+            y=df_plot["PIR"], 
+            mode="lines+markers", 
+            name="PIR (Gerakan)", 
+            yaxis="y2"
+        ))
+
+        fig.update_layout(
+            yaxis=dict(title="Jarak (cm)"),
+            yaxis2=dict(
+                title="PIR (0=Aman, 1=Gerak)", 
+                overlaying="y", 
+                side="right", 
+                showgrid=False,
+                range=[-0.1, 1.1] 
+            ),
+            height=520,
+            legend=dict(x=0, y=1.1, orientation="h")
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Menunggu data Jarak/PIR untuk menampilkan chart.")
+    
+    # === FITUR DOWNLOAD CSV (Ditempatkan di bawah chart) ===
     csv_data = st.session_state.df_brankas.to_csv(index=False).encode("utf-8")
     is_data_available = not st.session_state.df_brankas.empty
     
-    col1, col2, col3, col4 = st.columns(4) 
-    
-    with col1:
-        if st.button("📷 Ambil Foto"):
-            mqtt_client.publish(TOPIC_CAM_TRIGGER, "capture")
-            
-    with col2:
-        if st.button("🔇 Matikan Alarm"):
-            # Pesan "OFF" untuk mematikan alarm
-            mqtt_client.publish(TOPIC_ALARM_CONTROL, "OFF")
-            
-    with col3:
-        if st.button("🔄 Refresh Gambar"):
-            st.session_state.photo_url = f"{st.session_state.photo_url.split('?')[0]}?t={int(time.time())}"
-    
-    # === FITUR BARU: DOWNLOAD CSV (Ditempatkan di sini) ===
-    with col4:
-        # st.download_button akan selalu tampil sebagai tombol
+    if is_data_available:
         st.download_button(
-            label="Download CSV",
+            label="⬇️ Download Semua Log CSV",
             data=csv_data,
             file_name=f"brankas_logs_{int(time.time())}.csv",
-            mime="text/csv",
-            # Menonaktifkan tombol jika tidak ada data (opsional, tapi disarankan)
-            # disabled=not is_data_available
+            mime="text/csv"
         )
-        if not is_data_available:
-             st.info("No data")
+    else:
+        st.info("Tidak ada data log untuk diunduh.")
 
+
+with log_col:
+    st.header("Log Status Brankas")
+    st.dataframe(st.session_state.df_brankas.tail(10)) 
+    st.markdown("### Kontrol Cepat")
+    
+    # Pindahkan tombol kontrol cepat ke sini
+    control_col1, control_col2, control_col3 = st.columns(3)
+    
+    with control_col1:
+        if st.button("📷 Ambil Foto", use_container_width=True):
+            mqtt_client.publish(TOPIC_CAM_TRIGGER, "capture")
+            
+    with control_col2:
+        if st.button("🔇 Matikan Alarm", use_container_width=True):
+            mqtt_client.publish(TOPIC_ALARM_CONTROL, "OFF")
+            
+    with control_col3:
+        if st.button("🔄 Refresh Foto", use_container_width=True):
+            st.session_state.photo_url = f"{st.session_state.photo_url.split('?')[0]}?t={int(time.time())}"
 
     st.subheader("Foto Terbaru")
     st.image(st.session_state.photo_url, use_column_width=True)
 
-    # === LIVE CHART & LOGS ===
-    chart_col, log_col = st.columns([2, 1])
+# --- GARIS PEMISAH (opsional) ---
+st.markdown("---")
 
-    with chart_col:
-        st.subheader("Live Chart (Jarak & PIR)")
-        df_plot = st.session_state.df_brankas.tail(200).copy()
-        
-        # ... (Kode Plotly chart Anda di sini) ...
-        # Pastikan Anda mengimpor 'plotly.graph_objects as go' di atas.
-        
-        df_plot.dropna(subset=['Jarak (cm)', 'PIR'], inplace=True) 
+# --- BAGIAN BAWAH (TAB UNTUK DETAIL ML) ---
+tab1, tab2, tab3 = st.tabs(["🏠 Detail Brankas", "🖼️ Log Prediksi Wajah", "🔊 Log Prediksi Suara"])
 
-        if not df_plot.empty:
-            fig = go.Figure()
-            
-            fig.add_trace(go.Scatter(
-                x=df_plot["Timestamp"], 
-                y=df_plot["Jarak (cm)"], 
-                mode="lines+markers", 
-                name="Jarak (cm)"
-            ))
-            
-            fig.add_trace(go.Scatter(
-                x=df_plot["Timestamp"], 
-                y=df_plot["PIR"], 
-                mode="lines+markers", 
-                name="PIR (Gerakan)", 
-                yaxis="y2"
-            ))
+# Tab Detail Brankas (sekarang bisa berisi log lama/lainnya)
+with tab1:
+    st.subheader("Log Data Brankas Lengkap")
+    st.dataframe(st.session_state.df_brankas)
 
-            fig.update_layout(
-                yaxis=dict(title="Jarak (cm)"),
-                yaxis2=dict(
-                    title="PIR (0=Aman, 1=Gerak)", 
-                    overlaying="y", 
-                    side="right", 
-                    showgrid=False,
-                    range=[-0.1, 1.1] 
-                ),
-                height=520,
-                legend=dict(x=0, y=1.1, orientation="h")
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Menunggu data Jarak/PIR untuk menampilkan chart.")
 
-    with log_col:
-        st.subheader("Log Status Brankas")
-        st.dataframe(st.session_state.df_brankas.tail(10)) 
-
-# Tab ML Gambar (tidak berubah)
+# Tab Log Prediksi Wajah
 with tab2:
     st.subheader("Log Prediksi Wajah")
     st.dataframe(st.session_state.df_face.tail(10))
 
-# Tab ML Suara (tidak berubah)
+# Tab Log Prediksi Suara
 with tab3:
     st.subheader("Audio Terbaru untuk Analisis")
     if st.session_state.audio_url:
