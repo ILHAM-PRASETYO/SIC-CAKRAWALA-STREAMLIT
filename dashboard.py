@@ -205,48 +205,118 @@ if not st.session_state.df_brankas.empty:
 # ====================================================================
 # UI Dashboard
 # ====================================================================
-st.title("🔒 Dashboard Monitoring Brankas & AI")
+# ... (Kode inisialisasi dan fungsi di atas tetap sama) ...
+
+# UI Dashboard
+st.title("🔒 Dashboard Monitoring Brankas & ML")
 tab1, tab2, tab3 = st.tabs(["🏠 Brankas", "🖼️ ML Gambar", "🔊 ML Audio"])
 
 # Tab Brankas
 with tab1:
-    col1, col2, col3 = st.columns(3)
+    # Mengambil data CSV terlebih dahulu
+    csv_data = st.session_state.df_brankas.to_csv(index=False).encode("utf-8")
+    is_data_available = not st.session_state.df_brankas.empty
+    
+    col1, col2, col3, col4 = st.columns(4) 
+    
     with col1:
         if st.button("📷 Ambil Foto"):
-            # Menggunakan konstanta TOPIC_CAM_TRIGGER
             mqtt_client.publish(TOPIC_CAM_TRIGGER, "capture")
+            
     with col2:
         if st.button("🔇 Matikan Alarm"):
-            # Menggunakan konstanta TOPIC_ALARM_CONTROL dan pesan "OFF" (huruf kapital)
+            # Pesan "OFF" untuk mematikan alarm
             mqtt_client.publish(TOPIC_ALARM_CONTROL, "OFF")
+            
     with col3:
         if st.button("🔄 Refresh Gambar"):
             st.session_state.photo_url = f"{st.session_state.photo_url.split('?')[0]}?t={int(time.time())}"
+    
+    # === FITUR BARU: DOWNLOAD CSV (Ditempatkan di sini) ===
+    with col4:
+        # st.download_button akan selalu tampil sebagai tombol
+        st.download_button(
+            label="Download CSV",
+            data=csv_data,
+            file_name=f"brankas_logs_{int(time.time())}.csv",
+            mime="text/csv",
+            # Menonaktifkan tombol jika tidak ada data (opsional, tapi disarankan)
+            # disabled=not is_data_available
+        )
+        if not is_data_available:
+             st.info("No data")
+
 
     st.subheader("Foto Terbaru")
     st.image(st.session_state.photo_url, use_column_width=True)
 
-    st.subheader("Log Brankas")
-    st.dataframe(st.session_state.df_brankas.tail(10))
+    # === LIVE CHART & LOGS ===
+    chart_col, log_col = st.columns([2, 1])
 
-# Tab ML Gambar
+    with chart_col:
+        st.subheader("Live Chart (Jarak & PIR)")
+        df_plot = st.session_state.df_brankas.tail(200).copy()
+        
+        # ... (Kode Plotly chart Anda di sini) ...
+        # Pastikan Anda mengimpor 'plotly.graph_objects as go' di atas.
+        
+        df_plot.dropna(subset=['Jarak (cm)', 'PIR'], inplace=True) 
+
+        if not df_plot.empty:
+            fig = go.Figure()
+            
+            fig.add_trace(go.Scatter(
+                x=df_plot["Timestamp"], 
+                y=df_plot["Jarak (cm)"], 
+                mode="lines+markers", 
+                name="Jarak (cm)"
+            ))
+            
+            fig.add_trace(go.Scatter(
+                x=df_plot["Timestamp"], 
+                y=df_plot["PIR"], 
+                mode="lines+markers", 
+                name="PIR (Gerakan)", 
+                yaxis="y2"
+            ))
+
+            fig.update_layout(
+                yaxis=dict(title="Jarak (cm)"),
+                yaxis2=dict(
+                    title="PIR (0=Aman, 1=Gerak)", 
+                    overlaying="y", 
+                    side="right", 
+                    showgrid=False,
+                    range=[-0.1, 1.1] 
+                ),
+                height=520,
+                legend=dict(x=0, y=1.1, orientation="h")
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Menunggu data Jarak/PIR untuk menampilkan chart.")
+
+    with log_col:
+        st.subheader("Log Status Brankas")
+        st.dataframe(st.session_state.df_brankas.tail(10)) 
+
+# Tab ML Gambar (tidak berubah)
 with tab2:
     st.subheader("Log Prediksi Wajah")
     st.dataframe(st.session_state.df_face.tail(10))
 
-# Tab ML Suara
+# Tab ML Suara (tidak berubah)
 with tab3:
     st.subheader("Audio Terbaru untuk Analisis")
     if st.session_state.audio_url:
-        # Gunakan st.audio() untuk menampilkan pemutar
         st.audio(st.session_state.audio_url, format='audio/wav')
     else:
         st.info("Menunggu rekaman audio terbaru...")
 
     st.subheader("Log Prediksi Suara")
     st.dataframe(st.session_state.df_voice.tail(10))
+    
 # Refresh otomatis
 time.sleep(2)
 st.rerun()
-
-
